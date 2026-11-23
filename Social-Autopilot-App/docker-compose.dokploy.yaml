@@ -1,0 +1,110 @@
+# Dokploy: Compose app -> this file. Set the variables below in Dokploy's Environment tab
+# (DOMAIN, JWT_SECRET, DB_PASSWORD), add any social-provider keys there too (see .env.example),
+# then attach your domain to service "app", port 5000.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: always
+    env_file: .env # Dokploy writes the Environment tab here; carries the social-provider keys
+    environment:
+      MAIN_URL: https://${DOMAIN}
+      FRONTEND_URL: https://${DOMAIN}
+      NEXT_PUBLIC_BACKEND_URL: https://${DOMAIN}/api
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgresql://sa-user:${DB_PASSWORD}@postgres:5432/sa-db
+      REDIS_URL: redis://redis:6379
+      TEMPORAL_ADDRESS: temporal:7233
+      IS_GENERAL: 'true'
+      DISABLE_REGISTRATION: 'false'
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_DIRECTORY: /uploads
+      NX_ADD_PLUGINS: 'false'
+    volumes:
+      - uploads:/uploads/
+      - config:/config/
+    expose:
+      - '5000'
+    networks: [internal, temporal-network]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  postgres:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: sa-user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: sa-db
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: pg_isready -U sa-user -d sa-db
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.2
+    restart: always
+    volumes: [redis-data:/data]
+    networks: [internal]
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  temporal-elasticsearch:
+    image: elasticsearch:7.17.27
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+    networks: [temporal-network]
+    volumes: [temporal-es-data:/usr/share/elasticsearch/data]
+
+  temporal-postgresql:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: temporal
+    networks: [temporal-network]
+    volumes: [temporal-db-data:/var/lib/postgresql/data]
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    restart: always
+    depends_on: [temporal-postgresql, temporal-elasticsearch]
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=${DB_PASSWORD}
+      - POSTGRES_SEEDS=temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - ENABLE_ES=true
+      - ES_SEEDS=temporal-elasticsearch
+      - ES_VERSION=v7
+      - TEMPORAL_NAMESPACE=default
+    networks: [temporal-network]
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+
+volumes:
+  uploads:
+  config:
+  postgres-data:
+  redis-data:
+  temporal-es-data:
+  temporal-db-data:
+
+networks:
+  internal:
+  temporal-network:
