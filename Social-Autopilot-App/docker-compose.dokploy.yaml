@@ -11,12 +11,12 @@ services:
       - path: .env
         required: false
     environment:
-      MAIN_URL: https://${DOMAIN}
-      FRONTEND_URL: https://${DOMAIN}
-      NEXT_PUBLIC_BACKEND_URL: https://${DOMAIN}/api
+      MAIN_URL: https://${DOMAIN:?set DOMAIN}
+      FRONTEND_URL: https://${DOMAIN:?set DOMAIN}
+      NEXT_PUBLIC_BACKEND_URL: https://${DOMAIN:?set DOMAIN}/api
       BACKEND_INTERNAL_URL: http://localhost:3000
-      JWT_SECRET: ${JWT_SECRET}
-      DATABASE_URL: postgresql://sa-user:${DB_PASSWORD}@postgres:5432/sa-db
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      DATABASE_URL: postgresql://sa-user:${DB_PASSWORD:?set DB_PASSWORD in Dokploy Environment}@postgres:5432/sa-db
       REDIS_URL: redis://redis:6379
       TEMPORAL_ADDRESS: temporal:7233
       IS_GENERAL: 'true'
@@ -40,13 +40,14 @@ services:
     restart: always
     environment:
       POSTGRES_USER: sa-user
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in Dokploy Environment}
       POSTGRES_DB: sa-db
     volumes: [postgres-data:/var/lib/postgresql/data]
     networks: [internal]
     healthcheck:
       test: pg_isready -U sa-user -d sa-db
       interval: 10s
+      start_period: 30s
       timeout: 3s
       retries: 5
 
@@ -75,7 +76,7 @@ services:
     image: postgres:16
     restart: always
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in Dokploy Environment}
       POSTGRES_USER: temporal
     networks: [temporal-network]
     volumes: [temporal-db-data:/var/lib/postgresql/data]
@@ -88,7 +89,7 @@ services:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=temporal
-      - POSTGRES_PWD=${DB_PASSWORD}
+      - POSTGRES_PWD=${DB_PASSWORD:?set DB_PASSWORD in Dokploy Environment}
       - POSTGRES_SEEDS=temporal-postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
       - ENABLE_ES=true
